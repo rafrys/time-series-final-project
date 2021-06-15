@@ -1,0 +1,60 @@
+---
+title: "main"
+author: "Erim Celen & Rafal"
+date: "6/15/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Packages
+
+```{r}
+library(readr)
+library(tidyverse)
+library(xts)
+library(fUnitRoots)
+```
+
+## Loading Data
+
+```{r}
+data <- read.csv("data/data.csv")
+```
+
+
+```{r}
+data %>% glimpse()
+```
+```{r}
+data$date <- as.Date(data$date, format = "%Y-%m-%d")
+data <- xts(data[, -1], order.by = data$date)
+```
+
+```{r}
+data$dy5 <- diff.xts(data$y5)
+data$dy7 <- diff.xts(data$y7)
+```
+
+```{r}
+source("functions/testdf.R")
+```
+
+## Find one pair of cointegrated time series out of ten considered time series.
+
+```{r}
+testdf(variable = data$y5,
+       max.augmentations = 3)
+testdf(variable = data$dy5, 
+       max.augmentations = 3)
+```
+
+
+```{r}
+testdf(variable = ppi_cpi$y, 
+       max.augmentations = 3)
+testdf(variable = ppi_cpi$dppi, 
+       max.augmentations = 3)
+```
