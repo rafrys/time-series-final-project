@@ -1,7 +1,7 @@
 testdf <- function(variable, max.augmentations)	{
   
-  #require(fUnitRoots)
-  #require(lmtest)
+  require(fUnitRoots)
+  require(lmtest)
   
   results_adf <- data.frame(augmentations = -1, adf = 0, p_adf = 0, bgodfrey = 0, p_bg = 0)
   variable    <- coredata(variable)
@@ -9,11 +9,11 @@ testdf <- function(variable, max.augmentations)	{
   variable    <- variable[!is.na(variable)]
   
   for(augmentations in 0:max.augmentations) {
-    df.test  <- fUnitRoots::adfTest(variable, lags = augmentations, type = "c")
+    df.test  <- adfTest(variable, lags = augmentations, type = "c")
     df       <- as.numeric(df.test@test$statistic)
     p_adf    <- as.numeric(df.test@test$p.value)
     resids   <- df.test@test$lm$residuals
-    bgtest   <- lmtest::bgtest(resids ~ 1, order = 1)
+    bgtest   <- bgtest(resids ~ 1, order = 1)
     bgodfrey <- bgtest$statistic
     names(bgodfrey) <- NULL
     p_bg     <- bgtest$p.value

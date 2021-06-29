@@ -6,55 +6,133 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 ```
 
-##Packages
-
-```{r}
+```{r include=FALSE}
 library(readr)
 library(tidyverse)
 library(xts)
 library(fUnitRoots)
+library(kableExtra)
 ```
 
-## Loading Data
+# 1. Abstract
+# 2. Aim of the study
+# 3. Data Description
 
-```{r}
+```{r include=FALSE}
 data <- read.csv("data/data.csv")
 ```
 
+```{r echo=FALSE}
+kable(head(data),'simple',caption = 'Head of Data')
+```
+
+# 4. Model building.
 
 ```{r}
-data %>% glimpse()
+cor(data[,-1]) %>% kable('simple')
 ```
+
 ```{r}
 data$date <- as.Date(data$date, format = "%Y-%m-%d")
 data <- xts(data[, -1], order.by = data$date)
 ```
 
+```{r echo=FALSE}
+head(data)
+```
+
 ```{r}
-data$dy5 <- diff.xts(data$y5)
-data$dy7 <- diff.xts(data$y7)
+data[, c(4,10)] %>% 
+  as_tibble() %>%
+  mutate(date = index(data)) %>%
+  pivot_longer(!date) %>%
+  ggplot(aes(date, value, col = name)) +
+  geom_line() +
+  theme_bw() +
+  labs(
+    title = "y4 and y10 indices"
+  )
 ```
 
 ```{r}
 source("functions/testdf.R")
 ```
 
-## Find one pair of cointegrated time series out of ten considered time series.
 
 ```{r}
-testdf(variable = data$y5,
-       max.augmentations = 3)
-testdf(variable = data$dy5, 
-       max.augmentations = 3)
+y4_y10 <- data[,c(4,10)]
 ```
 
+## ADF test for stationarty
 
 ```{r}
-testdf(variable = ppi_cpi$y, 
-       max.augmentations = 3)
-testdf(variable = ppi_cpi$dppi, 
-       max.augmentations = 3)
+resultsy4 <-
+testdf(variable = y4_y10$y4,  
+       max.augmentations = 3)           
+
+resultsy10 <-
+testdf(variable = y4_y10$y10,  
+       max.augmentations = 3)           
+
+p_values <- cbind(resultsy10,resultsy4)
+p_values <- p_values[,c(1,3,8)]
+colnames(p_values) <- c("augmentations","p_adf_y10","p_adf_y4")
+
+p_values %>%
+  knitr::kable(digits = 3) %>%
+  kableExtra::kable_styling(full_width = F,
+                            bootstrap_options = c("striped"))
+
+# Both series are non stationary
 ```
+
+let's see the first differences
+```{r}
+results2y4 <-
+testdf(variable = diff.xts(y4_y10$y4),  
+       max.augmentations = 3)           
+
+results2y10 <-
+testdf(variable = diff.xts(y4_y10$y10),  
+       max.augmentations = 3)           
+
+p_values2 <- cbind(results2y10,results2y4)
+p_values2 <- p_values2[,c(1,3,8)]
+colnames(p_values2) <- c("augmentations","p_adf_y10","p_adf_y4")
+
+p_values2 %>%
+  knitr::kable(digits = 3) %>%
+  kableExtra::kable_styling(full_width = F,
+                            bootstrap_options = c("striped"))
+
+# Both series are stationary in the first order
+```
+
+creating the in sample out sample.
+
+```{r}
+in_sample <- y4_y10[1:290] 
+out_of_sample <-y4_y10[291:nrow(y4_y10)]
+```
+
+## Cointegration test
+```{r}
+model.coint <- lm(y4 ~ y10, data = in_sample)
+summary(model.coint)
+```
+```{r}
+testdf(variable = residuals(model.coint), max.augmentations = 3)
+```
+
+## VAR Model
+
+# 5. Results
+
+
+
+
+
+
+
