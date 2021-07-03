@@ -14,6 +14,7 @@ library(tidyverse)
 library(xts)
 library(fUnitRoots)
 library(kableExtra)
+library(vars)
 ```
 
 # 1. Abstract
@@ -119,14 +120,64 @@ out_of_sample <-y4_y10[291:nrow(y4_y10)]
 
 ## Cointegration test
 ```{r}
-model.coint <- lm(y4 ~ y10, data = in_sample)
+#model for cointegration
+model.coint <- lm(y4 ~ y10, data = in_sample) 
 summary(model.coint)
 ```
-```{r}
-testdf(variable = residuals(model.coint), max.augmentations = 3)
+# buraya cointregration vektoru ve denklemi gelicek.
+
+
+```{r message=FALSE, warning=FALSE}
+#Adf test for residuals.
+kable(testdf(variable = residuals(model.coint), max.augmentations = 3))
+#y4 and y10 are non-stationary and cointegrated. 
 ```
 
+
+## Causality test
+
+```{r}
+grangertest(y4 ~ y10,
+            data = y4_y10,
+            order = 3)
+```
+
+
+```{r}
+grangertest(y10 ~ y4,
+            data = y4_y10,
+            order = 3)
+```
+
+ 
+
 ## VAR Model
+
+```{r}
+VARselect(y4_y10, 
+          lag.max = 6)    
+```
+
+```{r}
+VARselect(y4_y10, 
+          lag.max = 6,
+          season = 12)    
+```
+
+```{r}
+varseason <- VAR(y4_y10,
+                    p = 3,  # order of VAR model
+                    season = 12)
+
+summary(varseason)
+```
+
+```{r}
+varlag3 <- VAR(y4_y10, p=3)
+
+summary(varlag3)
+```
+
 
 # 5. Results
 
