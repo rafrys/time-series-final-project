@@ -166,7 +166,7 @@ VARselect(y4_y10,
 
 ```{r}
 varseason <- VAR(y4_y10,
-                    p = 3,  # order of VAR model
+                    p = 3, 
                     season = 12)
 
 summary(varseason)
@@ -177,6 +177,17 @@ varlag3 <- VAR(y4_y10, p=3)
 
 summary(varlag3)
 ```
+
+```{r message=FALSE, warning=FALSE}
+plot(varlag3)
+```
+
+
+## ARIMA Model
+
+
+
+
 
 
 # 5. Results
