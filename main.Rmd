@@ -3,6 +3,8 @@ title: "main"
 author: "Erim Celen & Rafal"
 date: "6/15/2021"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -181,6 +183,25 @@ summary(varlag3)
 ```{r message=FALSE, warning=FALSE}
 plot(varlag3)
 ```
+
+```{r}
+serial.test(varlag3, type = "BG")
+#no autocorrelation among residuals.
+```
+
+## Forecasting with VAR
+```{r}
+y4_y10.short <- VAR(in_sample, 
+                          p = 3)
+```
+
+Now, let's and run the forecasts:
+```{r}
+y4_y10.forecast <- predict(y4_y10.short,
+                                 n.ahead = 10,
+                                 ci = 0.95) # 95% confidence interval
+```
+
 
 
 ## ARIMA Model
