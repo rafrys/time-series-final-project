@@ -4,10 +4,15 @@ author: "Erim Celen & Rafal"
 date: "6/15/2021"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type:= console
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo    = TRUE, 
+                      cache   = TRUE,
+                      message = FALSE, 
+                      warning = FALSE)
+options(scipen = 10)
 ```
 
 ```{r include=FALSE}
@@ -17,11 +22,23 @@ library(xts)
 library(fUnitRoots)
 library(kableExtra)
 library(vars)
+library(forecast)
+library(lmtest)
+library(quantmod)
 ```
 
 # 1. Abstract
+Time series surround us on all sides. Any phenomena that occurs at regular intervals and can be quantified is a series. Our pulse rate, power consumption or quotations of various financial instruments. Therefore, understanding and taming them is an extremely important task. In our work we would like to introduce you to a small piece of the world of time series and the incredible satisfaction that comes from getting to know them better. 
+
+On the given dataset, we extracted and tested the potential cointegration of the time series, which we explored through both data visualization and formal testing. Then, using VAR and ARIMA class models, we visualized the dependencies of the series and made predictions for the out-of-sample period. Finally, we compared accuracy of forecasts of prices using the ex-post forecast error measures and choose the winner model.
+
 # 2. Aim of the study
+
+The main purpose of our work is to provide a practical test of the skills learned during the semester of time series study and to familiarize ourselves with the analysis workflow used in real life.
+
 # 3. Data Description
+The data was generously provided as part of the project description and contain prices of ten financial instruments measured in daily intervals, for a total sample of 300 observations.
+ 
 
 ```{r include=FALSE}
 data <- read.csv("data/data.csv")
@@ -47,16 +64,13 @@ head(data)
 ```
 
 ```{r}
-data[, c(4,10)] %>% 
-  as_tibble() %>%
-  mutate(date = index(data)) %>%
-  pivot_longer(!date) %>%
-  ggplot(aes(date, value, col = name)) +
-  geom_line() +
-  theme_bw() +
-  labs(
-    title = "y4 and y10 indices"
-  )
+plot(data[, c(4,10)],
+     col = c("black", "blue"),
+     major.ticks = "months", 
+     grid.ticks.on = "months",
+     grid.ticks.lty = 3,
+     main = "Selected financial instruments",
+     legend.loc = "topleft")
 ```
 
 ```{r}
@@ -68,7 +82,8 @@ source("functions/testdf.R")
 y4_y10 <- data[,c(4,10)]
 ```
 
-## ADF test for stationarty
+## Testing cointegration
+### Checking the integration order with Augmented Dickey-Fuller test
 
 ```{r}
 resultsy4 <-
@@ -80,19 +95,18 @@ testdf(variable = y4_y10$y10,
        max.augmentations = 3)           
 
 p_values <- cbind(resultsy10,resultsy4)
-p_values <- p_values[,c(1,3,8)]
-colnames(p_values) <- c("augmentations","p_adf_y10","p_adf_y4")
+p_values <- p_values[,c(1,3,5,8,10)]
+colnames(p_values) <- c("augmentations","p_adf_y10","p_bg_y10","p_adf_y4","p_bg_y4")
 
 p_values %>%
   knitr::kable(digits = 3) %>%
   kableExtra::kable_styling(full_width = F,
                             bootstrap_options = c("striped"))
 
-# Both series are non stationary
 ```
+Both series examine non-stationary behavior. We will proceed by testing the first differences.
 
-let's see the first differences
-```{r}
+```{r warning=FALSE}
 results2y4 <-
 testdf(variable = diff.xts(y4_y10$y4),  
        max.augmentations = 3)           
@@ -102,39 +116,40 @@ testdf(variable = diff.xts(y4_y10$y10),
        max.augmentations = 3)           
 
 p_values2 <- cbind(results2y10,results2y4)
-p_values2 <- p_values2[,c(1,3,8)]
-colnames(p_values2) <- c("augmentations","p_adf_y10","p_adf_y4")
+p_values2 <- p_values2[,c(1,3,5,8,10)]
+colnames(p_values2) <- c("augmentations","p_adf_y10","p_bg_y10","p_adf_y4","p_bg_y4")
 
 p_values2 %>%
   knitr::kable(digits = 3) %>%
   kableExtra::kable_styling(full_width = F,
                             bootstrap_options = c("striped"))
-
-# Both series are stationary in the first order
 ```
+With p-values lower than assumed 0.05, we can reject the null hypothesis that that a unit root is present in both time series. As a result, both variables are $\sim I(1)$, so in the next step we will check whether they are cointegrated.
 
-creating the in sample out sample.
+Creating the in sample out sample.
 
-```{r}
+```{r }
 in_sample <- y4_y10[1:290] 
 out_of_sample <-y4_y10[291:nrow(y4_y10)]
 ```
 
 ## Cointegration test
 ```{r}
-#model for cointegration
 model.coint <- lm(y4 ~ y10, data = in_sample) 
 summary(model.coint)
 ```
-# buraya cointregration vektoru ve denklemi gelicek.
+# The cointregration vector and its equation.
 
 
 ```{r message=FALSE, warning=FALSE}
 #Adf test for residuals.
-kable(testdf(variable = residuals(model.coint), max.augmentations = 3))
-#y4 and y10 are non-stationary and cointegrated. 
+testdf(variable = residuals(model.coint), max.augmentations = 3)
 ```
+Using ADF test with no augmentation, we can reject the null hypothseis about non-stationarity of residuals, so residuals are stationary, which means that series *y_4* and *y_10* are cointegrated.
 
+The cointegrating vector is [1, 11.058 , -1.6] which defines the cointegrating relationship as: 1 * y_4 + 11.058 - 1.5 * y_10.
+
+Next we proceed to test whether *y_4* Granger causes *y_10* and vice versa.
 
 ## Causality test
 
@@ -151,20 +166,23 @@ grangertest(y10 ~ y4,
             order = 3)
 ```
 
- 
+At 1% significance level we observe bi-directional feedback. 
 
 ## VAR Model
+Since we observed bi-directional causality we can try to estimate a VAR model.
+To find the proper order of VAR model we will use information criteria.
 
 ```{r}
-VARselect(y4_y10, 
-          lag.max = 6)    
+VARselect(y4_y10, lag.max = 6, season = 12) %>%
+  .$criteria %>% 
+  t() %>% 
+  as_tibble() %>% 
+  mutate(nLags = 1:nrow(.)) %>%
+  kbl(digits = 3) %>%
+  kable_classic("striped", full_width = F)   
 ```
 
-```{r}
-VARselect(y4_y10, 
-          lag.max = 6,
-          season = 12)    
-```
+Information criteria are the lowest for the 3rd lag. As a result, let’s estimate the model with 3 lags and seasonal dummies.
 
 ```{r}
 varseason <- VAR(y4_y10,
@@ -173,26 +191,25 @@ varseason <- VAR(y4_y10,
 
 summary(varseason)
 ```
+We can notice that indeed, few selected seasonal dummies are statistically significant.
+
+### VAR model diagnostics
+
+```{r fig.width = 12, fig.height=12}
+plot(varseason)
+```
+After visual inspection we can conclude, that no further lags are statistically significant. In the next step let's verify this formally using the Breusch-Godfrey (BG) test.
 
 ```{r}
-varlag3 <- VAR(y4_y10, p=3)
-
-summary(varlag3)
+serial.test(varseason, type = "BG")
 ```
+We can not reject the null hypothesis about the lack of autocorellation among residuals. There is no need to extend our model by adding further lags.
 
-```{r message=FALSE, warning=FALSE}
-plot(varlag3)
-```
-
+### Forecasting with VAR
 ```{r}
-serial.test(varlag3, type = "BG")
-#no autocorrelation among residuals.
-```
-
-## Forecasting with VAR
-```{r}
-y4_y10.short <- VAR(in_sample, 
-                          p = 3)
+y4_y10.short <- VAR(in_sample,
+                    p = 3,
+                    season = 12)
 ```
 
 Now, let's and run the forecasts:
@@ -200,19 +217,179 @@ Now, let's and run the forecasts:
 y4_y10.forecast <- predict(y4_y10.short,
                                  n.ahead = 10,
                                  ci = 0.95) # 95% confidence interval
+
 ```
 
+VAR forecasts for y_4:
+```{r}
+y4_y10.forecast$fcst$y4
+```
 
+VAR forecasts for y_10:
+```{r}
+y4_y10.forecast$fcst$y10
+```
+
+```{r}
+
+y4_forecast <- xts(y4_y10.forecast$fcst$y4[,-4], 
+                    # we exclude the last column with CI
+                    tail(index(y4_y10), 10))
+
+names(y4_forecast) <- c("y4_fore", "y4_lower", "y4_upper")
+
+y10_forecast <- xts(y4_y10.forecast$fcst$y10[,-4], 
+                    # we exclude the last column with CI
+                    tail(index(y4_y10), 10))
+
+names(y10_forecast) <- c("y10_fore", "y10_lower", "y10_upper")
+
+
+y4_y10_forecast <- merge(y4_y10, 
+                 y4_forecast,
+                 y10_forecast)
+```
+
+```{r}
+plot(y4_y10_forecast[, c("y4", "y4_fore","y4_lower", "y4_upper")], 
+     major.ticks = "months", 
+     grid.ticks.on = "months",
+     grid.ticks.lty = 3,
+     main = "10 month forecast of the financial instrument y4",
+     col = c("black", "blue", "red", "red"))
+```
+
+```{r}
+plot(y4_y10_forecast["2021/", c("y4", "y4_fore",
+                 "y4_lower", "y4_upper")], 
+     major.ticks = "months", 
+     grid.ticks.on = "months",
+     grid.ticks.lty = 3,
+     main = "4 month forecast of the financial instrument y4",
+     col = c("black", "blue", "red", "red"))
+```
+
+```{r}
+plot(y4_y10_forecast[, c("y10", "y10_fore",
+                 "y10_lower", "y10_upper")], 
+     major.ticks = "months", 
+     grid.ticks.on = "months",
+     grid.ticks.lty = 3,
+     main = "10 month forecast of the financial instrument y10",
+     col = c("black", "blue", "red", "red"))
+```
+
+### Forecast accuracy measures
+```{r}
+y4_y10_forecast$mae.y4   <-  abs(y4_y10_forecast$y4 - y4_y10_forecast$y4_fore)
+y4_y10_forecast$mse.y4   <-  (y4_y10_forecast$y4 - y4_y10_forecast$y4_fore) ^ 2
+y4_y10_forecast$mape.y4  <-  abs((y4_y10_forecast$y4 - y4_y10_forecast$y4_fore)/y4_y10_forecast$y4)
+y4_y10_forecast$amape.y4 <-  abs((y4_y10_forecast$y4 - y4_y10_forecast$y4_fore) / 
+                            (y4_y10_forecast$y4 + y4_y10_forecast$y4_fore))
+
+y4_y10_forecast$mae.y10   <-  abs(y4_y10_forecast$y10 - y4_y10_forecast$y10_fore)
+y4_y10_forecast$mse.y10   <-  (y4_y10_forecast$y10 - y4_y10_forecast$y10_fore) ^ 2
+y4_y10_forecast$mape.y10  <-  abs((y4_y10_forecast$y10 - y4_y10_forecast$y10_fore)/y4_y10_forecast$y10)
+y4_y10_forecast$amape.y10 <-  abs((y4_y10_forecast$y10 - y4_y10_forecast$y10_fore) / 
+                            (y4_y10_forecast$y10 + y4_y10_forecast$y10_fore))
+```
+
+Finally, we can calculate its averages:
+```{r}
+colMeans(y4_y10_forecast[, 9:16], na.rm = TRUE)
+```
+
+Although the level of change was captured by our model, unfortunately its direction is projected inversely.
 
 ## ARIMA Model
+As a starting point, we will use auto arima algorithm for searching optimal parameters, utilizing the `arima.best.AIC` function. 
 
+```{r}
+arima.best.AIC <- 
+  auto.arima(y4_y10$y4,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "aic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
 
+```
 
+The AIC criterion is lowest for the model: ARIMA(1,1,1)  
 
+```{r}
+coeftest(arima.best.AIC)
+```
 
+```{r}
+Box.test(resid(arima.best.AIC), type = "Ljung-Box", lag =  1)
+```
+We can not reject the null hypothesis, about data being independently distributed.
+
+```{r}
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.AIC), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.1, 0.1))
+pacf(resid(arima.best.AIC), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+```
+
+We can observe significant effects around 12th and 30th lags.
+
+### Forecast
+```{r}
+forecasts <- forecast(arima.best.AIC, # model for prediction
+                      h = 10) # how many periods outside the sample
+```
+
+```{r}
+forecasts_data <- data.frame(f_mean  = as.numeric(forecasts$mean),
+                             f_lower = as.numeric(forecasts$lower[, 2]),
+                             f_upper = as.numeric(forecasts$upper[, 2]))
+
+forecasts_data <- xts(forecasts_data,tail(index(y4_y10), 10))
+
+names(forecasts_data) <- c("y4_mean", "y4_lower", "y4_upper")
+
+y4_y10_forecast_arima <- merge(y4_y10,forecasts_data)
+
+```
+
+```{r}
+plot(y4_y10_forecast_arima[, c("y4", "y4_mean","y4_lower", "y4_upper")], 
+     major.ticks = "months", 
+     grid.ticks.on = "months",
+     grid.ticks.lty = 3,
+     main = "10 month",
+     col = c("black", "blue", "red", "red"))
+```
+
+```{r}
+y4_y10_forecast_arima$mae   <-  abs(y4_y10_forecast_arima$y4 - y4_y10_forecast_arima$y4_mean)
+y4_y10_forecast_arima$mse   <-  (y4_y10_forecast_arima$y4 - y4_y10_forecast_arima$y4_mean) ^ 2
+y4_y10_forecast_arima$mape  <-  abs((y4_y10_forecast_arima$y4 - y4_y10_forecast_arima$y4_mean)/y4_y10_forecast_arima$y4)
+y4_y10_forecast_arima$amape <-  abs((y4_y10_forecast_arima$y4 - y4_y10_forecast_arima$y4_mean)/(y4_y10_forecast_arima$y4 + y4_y10_forecast_arima$y4_mean))
+```
+
+```{r}
+colMeans(y4_y10_forecast_arima[, c("mae", "mse", "mape", "amape")], na.rm = TRUE)
+```
 
 # 5. Results
 
+Similar to VAR model, although the level of change was captured by our model, unfortunately its direction is projected inversely. Looking at the accuracy measures, VAR model was characterized by lower mae and mse, hence this would be our best fitted model for this time series.
 
 
 
